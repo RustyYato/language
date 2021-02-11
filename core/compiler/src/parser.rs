@@ -84,30 +84,35 @@ impl<'input> Parser<'_, 'input> {
         }
     }
 
-    fn force_tok(&self, kind: impl Into<TokenKind>) {
-        let kind = kind.into();
+    fn force_tok(&self, kind: impl Clone + IntoIterator<Item = impl Into<TokenKind>>) -> Option<usize> {
+        let kind = kind;
         let start = self.builder.checkpoint();
         let mut error = false;
-        loop {
+        let pos = loop {
             let peek = self.peek();
             match peek {
-                Some(k) if k == kind => break,
+                Some(k) => {
+                    if let Some(pos) = kind.clone().into_iter().map(Into::into).position(|x| x == k) {
+                        break Some(pos)
+                    } else {
+                        self.eat();
+                        error = true;
+                    }
+                }
                 None => {
                     error = true;
-                    break
+                    break None
                 }
-                _ => (),
             }
-            error = true;
-            self.eat();
-        }
+        };
         if error {
             self.builder.error_at(start);
         }
-        self.tok(kind);
+        self.eat();
+        pos
     }
 
-    fn parse_scope_contents(&self) {
+    fn parse_scope_contents(&self) -> bool {
         loop {
             self.skip_ws();
             match self.peek() {
@@ -118,8 +123,14 @@ impl<'input> Parser<'_, 'input> {
                 _ => {
                     if self.is_expression() {
                         self.parse_expression();
+                        if self.peek() != Some(Symbol::EndCurly.into()) {
+                            break Some(1)
+                                != self.force_tok(
+                                    std::iter::once(Symbol::SemiColon).chain(std::iter::once(Symbol::EndCurly)),
+                                )
+                        }
                     } else {
-                        break
+                        break true
                     }
                 }
             }
@@ -138,7 +149,7 @@ impl<'input> Parser<'_, 'input> {
         }
         self.tok(Symbol::Assign);
         self.parse_expression();
-        self.force_tok(Symbol::SemiColon);
+        self.force_tok(Some(Symbol::SemiColon));
     }
 
     fn parse_loop(&self) {
@@ -175,8 +186,9 @@ impl<'input> Parser<'_, 'input> {
         self.skip_ws();
         let _node_loop = self.builder.start_node(NodeKind::Scope);
         self.tok(Symbol::StartCurly);
-        self.parse_scope_contents();
-        self.force_tok(Symbol::EndCurly);
+        if self.parse_scope_contents() {
+            self.force_tok(Some(Symbol::EndCurly));
+        }
     }
 
     fn parse_pattern(&self) {
