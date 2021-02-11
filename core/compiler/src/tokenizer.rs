@@ -1,5 +1,5 @@
 use dec::base::{
-    error::{Error, ErrorKind, PResult, ParseError},
+    error::{CaptureInput, Error, ErrorKind, PResult, ParseError},
     InputSplit, ParseOnce, Tag,
 };
 
@@ -114,17 +114,28 @@ pub fn token_kind<'input, E: ParseError<&'input str>>(input: &'input str) -> PRe
 
         let symbol = dec::map::map(dec::tag::tag(crate::tokens::AnySymbol), TokenKind::Symbol);
 
-        dec::branch::any((number, symbol)).parse_once(input)
+        if input.is_empty() {
+            return Err(Error::Error(E::from_input_kind(
+                input,
+                ErrorKind::Custom("Unexpected EOF"),
+            )))
+        }
+
+        match dec::branch::any((number, symbol)).parse_once(input) {
+            Ok(ok) => Ok(ok),
+            Err(Error::Failure(fail)) => match fail {},
+            Err(Error::Error(_)) => {
+                let (_, c) = input.char_indices().next().unwrap();
+                Ok((&input[c.len_utf8()..], TokenKind::Error))
+            }
+        }
     }
 }
 
-pub fn parse_digits<'input, E: ParseError<&'input str>>(input: &'input str) -> PResult<&'input str, (), E> {
+pub fn parse_digits(input: &str) -> PResult<&str, (), CaptureInput<&str>> {
     let trimmed = input.trim_start_matches(|c: char| c.is_ascii_digit());
     if input.len() == trimmed.len() {
-        Err(Error::Error(E::from_input_kind(
-            input,
-            ErrorKind::Custom("No integer found"),
-        )))
+        Err(Error::Error(CaptureInput(input)))
     } else {
         Ok((trimmed, ()))
     }

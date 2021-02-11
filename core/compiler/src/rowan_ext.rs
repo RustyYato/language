@@ -64,8 +64,17 @@ macro_rules! nodes {
 }
 
 nodes! {
-    Package
+    File
     Let
+    Pattern
+    Expression
+    Type
+    Scope
+    Loop
+    If
+    Then
+    ElseIf
+    Else
 }
 
 #[derive(Default)]
@@ -114,10 +123,11 @@ impl Builder {
         Finisher { builder: self }
     }
 
-    pub fn start_node_at(&self, checkpoint: rowan::Checkpoint, node: NodeKind) {
+    pub fn start_node_at(&self, checkpoint: rowan::Checkpoint, node: NodeKind) -> Finisher {
         self.inner
             .borrow_mut()
-            .start_node_at(checkpoint, SyntaxKind::Node(node).into())
+            .start_node_at(checkpoint, SyntaxKind::Node(node).into());
+        Finisher { builder: self }
     }
 
     pub fn token(&self, token: Token<'_>) {
@@ -126,26 +136,28 @@ impl Builder {
             .token(SyntaxKind::Token(token.kind).into(), token.lexeme)
     }
 
+    pub fn syntax_kind(&self, syntax_kind: SyntaxKind) {
+        let mut inner = self.inner.borrow_mut();
+        inner.start_node(syntax_kind.into());
+        inner.finish_node();
+    }
+
     pub fn error(&self) {
         let mut inner = self.inner.borrow_mut();
         inner.start_node(SyntaxKind::Error.into());
         inner.finish_node();
     }
 
-    pub fn error_token(&self, token: TokenKind) {
+    pub fn error_at(&self, checkpoint: rowan::Checkpoint) {
         let mut inner = self.inner.borrow_mut();
-        inner.start_node(SyntaxKind::Error.into());
-        inner.start_node(SyntaxKind::Token(token).into());
-        inner.finish_node();
+        inner.start_node_at(checkpoint, SyntaxKind::Error.into());
         inner.finish_node();
     }
 
-    pub fn error_node(&self, node: NodeKind) {
-        let mut inner = self.inner.borrow_mut();
-        inner.start_node(SyntaxKind::Error.into());
-        inner.start_node(SyntaxKind::Node(node).into());
-        inner.finish_node();
-        inner.finish_node();
+    pub fn custom_error(&self, f: impl FnOnce()) {
+        self.inner.borrow_mut().start_node(SyntaxKind::Error.into());
+        f();
+        self.inner.borrow_mut().finish_node();
     }
 }
 
@@ -169,7 +181,7 @@ impl Debug for Syntax {
         fn write_tabs(f: &mut Formatter<'_>) -> std::fmt::Result {
             let tabs = tabs();
             for _ in 0..tabs {
-                write!(f, "  ")?
+                write!(f, "    ")?
             }
             Ok(())
         }

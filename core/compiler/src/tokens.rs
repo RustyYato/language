@@ -23,6 +23,7 @@ pub enum TokenKind {
     Number,
     LineComment,
     BlockComment,
+    Error,
     Keyword(Keyword),
     Symbol(Symbol),
 }
@@ -60,13 +61,14 @@ impl TokenKind {
             Self::Number => 3,
             Self::LineComment => 4,
             Self::BlockComment => 5,
-            Self::Keyword(keyword) => keyword as u8 + 6,
-            Self::Symbol(symbol) => symbol as u8 + 6 + Keyword::COUNT,
+            Self::Error => 6,
+            Self::Keyword(keyword) => keyword as u8 + 7,
+            Self::Symbol(symbol) => symbol as u8 + 7 + Keyword::COUNT,
         }
     }
 
     pub fn decode(encoding: u8) -> Self {
-        const KEYWORD_END: u8 = 5 + Keyword::COUNT;
+        const KEYWORD_END: u8 = 6 + Keyword::COUNT;
         match encoding {
             0 => Self::Ident,
             1 => Self::WhiteSpace,
@@ -74,8 +76,9 @@ impl TokenKind {
             3 => Self::Number,
             4 => Self::LineComment,
             5 => Self::BlockComment,
-            6..=KEYWORD_END => Self::Keyword(Keyword::decode(encoding - 6)),
-            _ => Self::Symbol(Symbol::decode(encoding - 6 - Keyword::COUNT)),
+            6 => Self::Error,
+            7..=KEYWORD_END => Self::Keyword(Keyword::decode(encoding - 7)),
+            _ => Self::Symbol(Symbol::decode(encoding - 7 - Keyword::COUNT)),
         }
     }
 }
@@ -228,6 +231,7 @@ keyword! {
     Continue(continue)
 
     If(if)
+    Else(else)
     Match(match)
     Return(return)
 
