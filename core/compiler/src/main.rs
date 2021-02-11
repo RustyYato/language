@@ -6,5 +6,8 @@ fn main() {
     let file = file.as_str();
 
     let tokens = compiler::tokenizer::tokenize::<CaptureInput<_>>(file);
-    println!("{:#?}", tokens);
+    // println!("{:#?}", tokens);
+    let (_, tokens) = tokens.unwrap();
+    let (parse, errors) = compiler::parser::parse(&tokens);
+    println!("{:?}", parse.syntax());
 }

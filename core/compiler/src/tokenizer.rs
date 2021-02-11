@@ -10,7 +10,12 @@ pub fn tokenize<'input, E: ParseError<&'input str>>(input: &'input str) -> PResu
 }
 
 pub fn token<'input, E: ParseError<&'input str>>(input: &'input str) -> PResult<&'input str, Token<'input>, E> {
-    let (input, (lexeme, kind)) = dec::combinator::recognize(token_kind).parse_once(input)?;
+    let (input, (lexeme, mut kind)) = dec::combinator::recognize(token_kind).parse_once(input)?;
+    if kind == TokenKind::Ident {
+        if let Ok(keyword) = lexeme.parse() {
+            kind = TokenKind::Keyword(keyword)
+        }
+    }
     Ok((input, Token { lexeme, kind }))
 }
 

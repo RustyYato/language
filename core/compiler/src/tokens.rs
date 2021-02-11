@@ -3,19 +3,19 @@ use std::ops::Range;
 use dec::base::{error, Parse};
 use error::{CaptureInput, PResult};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Token<'input> {
     pub lexeme: &'input str,
     pub kind: TokenKind,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TokenKind {
     Ident,
     WhiteSpace,
@@ -51,11 +51,53 @@ impl Span {
     }
 }
 
+impl TokenKind {
+    pub fn encode(self) -> u8 {
+        match self {
+            Self::Ident => 0,
+            Self::WhiteSpace => 1,
+            Self::Integer => 2,
+            Self::Number => 3,
+            Self::LineComment => 4,
+            Self::BlockComment => 5,
+            Self::Keyword(keyword) => keyword as u8 + 6,
+            Self::Symbol(symbol) => symbol as u8 + 6 + Keyword::COUNT,
+        }
+    }
+
+    pub fn decode(encoding: u8) -> Self {
+        const KEYWORD_END: u8 = 5 + Keyword::COUNT;
+        match encoding {
+            0 => Self::Ident,
+            1 => Self::WhiteSpace,
+            2 => Self::Integer,
+            3 => Self::Number,
+            4 => Self::LineComment,
+            5 => Self::BlockComment,
+            6..=KEYWORD_END => Self::Keyword(Keyword::decode(encoding - 6)),
+            _ => Self::Symbol(Symbol::decode(encoding - 6 - Keyword::COUNT)),
+        }
+    }
+}
+
 macro_rules! symbol {
     ($($name:ident($symbol:literal))*) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        #[repr(u8)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         pub enum Symbol {
             $($name),*
+        }
+
+        impl From<Symbol> for TokenKind {
+            fn from(kw: Symbol) -> Self {
+                Self::Symbol(kw)
+            }
+        }
+
+        impl Symbol {
+            fn decode(encoding: u8) -> Self {
+                [$(Self::$name),*][encoding as usize]
+            }
         }
 
         pub(crate) struct AnySymbol;
@@ -117,9 +159,24 @@ macro_rules! symbol {
 
 macro_rules! keyword {
     ($($name:ident($keyword:ident))*) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        #[repr(u8)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         pub enum Keyword {
             $($name),*
+        }
+
+        impl From<Keyword> for TokenKind {
+            fn from(kw: Keyword) -> Self {
+                Self::Keyword(kw)
+            }
+        }
+
+        impl Keyword {
+            const COUNT: u8 = [$(stringify!($keyword)),*].len() as u8;
+
+            fn decode(encoding: u8) -> Self {
+                [$(Self::$name),*][encoding as usize]
+            }
         }
 
         impl core::str::FromStr for Keyword {
@@ -159,15 +216,21 @@ symbol! {
     Greater(">")
     Colon(":")
     Comma(",")
+    SemiColon(";")
 }
 
 keyword! {
+    Let(let)
+    Mut(mut)
+
     Loop(loop)
-    If(if)
     Break(break)
     Continue(continue)
+
+    If(if)
     Match(match)
     Return(return)
+
     Struct(struct)
     Union(union)
     Enum(enum)
